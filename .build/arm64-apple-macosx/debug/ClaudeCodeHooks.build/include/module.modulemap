@@ -1,0 +1,3 @@
+module ClaudeCodeHooks {
+    header "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/include/ClaudeCodeHooks-Swift.h"
+}

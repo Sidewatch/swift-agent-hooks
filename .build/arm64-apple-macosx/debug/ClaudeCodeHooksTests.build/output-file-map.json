@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/primary.swiftdeps"
+  },
+  "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/Tests/ClaudeCodeHooksTests/ClaudeCodeHooksTests.swift": {
+    "dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/ClaudeCodeHooksTests.d",
+    "object": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/ClaudeCodeHooksTests.swift.o",
+    "swiftmodule": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/ClaudeCodeHooksTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/ClaudeCodeHooksTests.swiftdeps",
+    "diagnostics": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooksTests.build/ClaudeCodeHooksTests.dia"
+  }
+}

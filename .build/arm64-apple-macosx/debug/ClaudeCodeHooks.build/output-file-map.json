@@ -1,0 +1,19 @@
+{
+  "": {
+    "swift-dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/primary.swiftdeps"
+  },
+  "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/Sources/ClaudeCodeHooks/HookEvent.swift": {
+    "dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookEvent.d",
+    "object": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookEvent.swift.o",
+    "swiftmodule": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookEvent~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookEvent.swiftdeps",
+    "diagnostics": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookEvent.dia"
+  },
+  "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/Sources/ClaudeCodeHooks/HookSettings.swift": {
+    "dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookSettings.d",
+    "object": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookSettings.swift.o",
+    "swiftmodule": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookSettings~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookSettings.swiftdeps",
+    "diagnostics": "/Users/davidsherlock/Documents/Development Work/Swift/Libraries/swift-claude-code-hooks/.build/arm64-apple-macosx/debug/ClaudeCodeHooks.build/HookSettings.dia"
+  }
+}
