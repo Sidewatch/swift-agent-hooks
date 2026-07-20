@@ -28,7 +28,7 @@ Claude Code runs user-configured shell commands on lifecycle events (`PostToolUs
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/arraypress/swift-claude-code-hooks.git", from: "1.0.0")
+    .package(url: "https://github.com/Sidewatch/swift-claude-code-hooks.git", from: "1.0.0")
 ]
 ```
 
