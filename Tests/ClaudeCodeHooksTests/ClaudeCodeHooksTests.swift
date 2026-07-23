@@ -130,6 +130,47 @@ final class ClaudeCodeHooksTests: XCTestCase {
         XCTAssertFalse(HookSettings.isInstalled(projectRoot: p, marker: marker))
     }
 
+    func testInstallThrowsOnMalformedSettingsAndLeavesFileUntouched() throws {
+        // A file that exists but can't be parsed must abort the install — treating
+        // it as "no settings" would rewrite it with only our hooks, destroying the
+        // user's permissions/hooks.
+        let broken = [
+            #"{"permissions":{"allow":["Bash(ls:*)"]}} // trailing comment"#,
+            #"{"permissions":{"allow":["Bash(ls:*)"#,   // truncated (interrupted write)
+            #"[{"hooks":{}}]"#,                          // top-level array, not an object
+        ]
+        for contents in broken {
+            let p = try makeProject(); defer { try? FileManager.default.removeItem(at: p) }
+            let url = HookSettings.settingsURL(projectRoot: p)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(contents.utf8).write(to: url)
+            XCTAssertThrowsError(try HookSettings.install(projectRoot: p, command: command, marker: marker)) {
+                XCTAssertEqual($0 as? HookSettings.SettingsError, .malformedSettings(url))
+            }
+            XCTAssertEqual(settingsText(p), contents)   // byte-for-byte untouched
+        }
+    }
+
+    func testInstallOntoAbsentOrEmptyFileStillWorks() throws {
+        // Absent (covered above) and EMPTY files are "no settings", not malformed.
+        let p = try makeProject(); defer { try? FileManager.default.removeItem(at: p) }
+        let url = HookSettings.settingsURL(projectRoot: p)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: url)
+        try HookSettings.install(projectRoot: p, command: command, marker: marker)
+        XCTAssertTrue(HookSettings.isInstalled(projectRoot: p, marker: marker))
+    }
+
+    func testUninstallNeverRewritesMalformedSettings() throws {
+        let p = try makeProject(); defer { try? FileManager.default.removeItem(at: p) }
+        let url = HookSettings.settingsURL(projectRoot: p)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let contents = #"{"oops": // not json"#
+        try Data(contents.utf8).write(to: url)
+        XCTAssertFalse(try HookSettings.uninstall(projectRoot: p, marker: marker))
+        XCTAssertEqual(settingsText(p), contents)
+    }
+
     func testUninstallNoOpWhenNotInstalled() throws {
         let p = try makeProject(); defer { try? FileManager.default.removeItem(at: p) }
         try seedUserSettings(p)

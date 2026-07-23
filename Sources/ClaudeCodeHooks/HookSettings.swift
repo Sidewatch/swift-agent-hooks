@@ -15,6 +15,14 @@ import Foundation
 /// binary path. The command string is expected to already contain the marker.
 public enum HookSettings {
 
+    /// Thrown by ``install(projectRoot:command:marker:)`` when a settings file
+    /// exists but cannot be parsed as a JSON object — merging would have to treat
+    /// its contents (permissions, the user's other hooks) as absent and rewrite
+    /// the file without them, so the install refuses instead.
+    public enum SettingsError: Error, Equatable {
+        case malformedSettings(URL)
+    }
+
     /// `<projectRoot>/.claude/settings.local.json`.
     public static func settingsURL(projectRoot: URL) -> URL {
         projectRoot.appendingPathComponent(".claude/settings.local.json")
@@ -40,7 +48,9 @@ public enum HookSettings {
     /// entries tagged with `marker` (so a moved binary's path is corrected and
     /// nothing duplicates), then appends fresh PostToolUse / Stop / Notification
     /// hooks running `command`. Merges into and preserves any other hooks. Throws
-    /// only on a filesystem/serialization failure.
+    /// on a filesystem/serialization failure, or ``SettingsError/malformedSettings(_:)``
+    /// when an existing settings file can't be parsed (rewriting it would destroy
+    /// whatever it held).
     ///
     /// - Parameters:
     ///   - command: the full shell line to run (must contain `marker`).
@@ -48,7 +58,7 @@ public enum HookSettings {
     @discardableResult
     public static func install(projectRoot: URL, command: String, marker: String) throws -> Bool {
         let url = settingsURL(projectRoot: projectRoot)
-        var root = stripTaggedHooks(readSettings(url), marker: marker)
+        var root = stripTaggedHooks(try readSettingsForMerge(url), marker: marker)
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
 
         let cmdObject: [String: Any] = ["type": "command", "command": command, "timeout": 5]
@@ -88,12 +98,26 @@ public enum HookSettings {
     }
 
     /// Reads a settings.json into a mutable dictionary. Absent, empty, or malformed
-    /// all yield `[:]` — install then writes a minimal valid file rather than
-    /// crashing (a hand-broken settings file is treated as no settings).
+    /// all yield `[:]` — safe for the read-only queries (`isInstalled` treats a
+    /// hand-broken file as "nothing installed" and never rewrites it). Anything
+    /// that writes the file back must use ``readSettingsForMerge(_:)`` instead.
     private static func readSettings(_ url: URL) -> [String: Any] {
         guard let data = try? Data(contentsOf: url), !data.isEmpty,
               let object = try? JSONSerialization.jsonObject(with: data),
               let dict = object as? [String: Any] else { return [:] }
+        return dict
+    }
+
+    /// Reads settings that are about to be merged into and rewritten. Absent or
+    /// empty yields `[:]`, but a present-yet-unparseable file (a stray `//`
+    /// comment, a truncated write, a non-object root) throws — treating user data
+    /// as "no settings" and overwriting would silently destroy it.
+    private static func readSettingsForMerge(_ url: URL) throws -> [String: Any] {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return [:] }
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            throw SettingsError.malformedSettings(url)
+        }
         return dict
     }
 
