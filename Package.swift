@@ -10,7 +10,8 @@ let package = Package(
         .library(name: "ClaudeCodeHooks", targets: ["ClaudeCodeHooks"]),
     ],
     targets: [
-        .target(name: "ClaudeCodeHooks", path: "Sources"),
+        .target(name: "ClaudeCodeHooks", path: "Sources",
+                swiftSettings: [.unsafeFlags(["-strict-concurrency=complete"])]),
         .testTarget(name: "ClaudeCodeHooksTests", dependencies: ["ClaudeCodeHooks"], path: "Tests"),
     ]
 )
