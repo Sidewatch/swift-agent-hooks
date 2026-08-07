@@ -46,6 +46,21 @@ final class ClaudeCodeHooksTests: XCTestCase {
         guard case .agentStopped(let a)? = e else { return XCTFail("expected agentStopped") }
         XCTAssertEqual(a.message, "Needs permission")
         XCTAssertTrue(a.isNotification)
+        XCTAssertNil(a.cwd)
+    }
+
+    func testAttentionCarriesCwd() {
+        // `cwd` is the strongest attribution signal in the payload — a consumer can compare it
+        // to a terminal's directory as a plain path, with no lossy transcript-name encoding.
+        // Both attention shapes must surface it verbatim.
+        let stop = HookEvent.parse(data(
+            #"{"session_id":"s3","cwd":"/Users/x/Developer/FSS Migration","hook_event_name":"Stop","stop_hook_active":false}"#))
+        guard case .agentStopped(let s)? = stop else { return XCTFail("expected agentStopped") }
+        XCTAssertEqual(s.cwd, "/Users/x/Developer/FSS Migration")
+        let notif = HookEvent.parse(data(
+            #"{"session_id":"s3","cwd":"/tmp/my_project","hook_event_name":"Notification","message":"m"}"#))
+        guard case .agentStopped(let n)? = notif else { return XCTFail("expected agentStopped") }
+        XCTAssertEqual(n.cwd, "/tmp/my_project")
     }
 
     func testUnknownEventWithFilePathStillSurfacesEdit() {

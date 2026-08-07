@@ -20,6 +20,14 @@ public struct HookFileEdit: Equatable {
 public struct HookAttention: Equatable {
     /// Claude Code session id, if present.
     public let sessionID: String?
+    /// The session's working directory when the event fired (`cwd`), if present.
+    ///
+    /// The strongest attribution signal the payload carries: a consumer can compare
+    /// it to a terminal's directory as a plain path. The session-id route (via the
+    /// transcript's encoded directory name under `~/.claude/projects`) is lossy —
+    /// the encoding folds `/`, ` `, `.` and `_` all onto `-` — so it should only
+    /// ever be a fallback for payloads that omit this field.
+    public let cwd: String?
     /// The prompt text for a `Notification` event (permission/attention), or the
     /// last assistant message for a `Stop` event; nil when absent.
     public let message: String?
@@ -28,8 +36,9 @@ public struct HookAttention: Equatable {
     /// from "done".
     public let isNotification: Bool
 
-    public init(sessionID: String?, message: String?, isNotification: Bool) {
+    public init(sessionID: String?, cwd: String?, message: String?, isNotification: Bool) {
         self.sessionID = sessionID
+        self.cwd = cwd
         self.message = message
         self.isNotification = isNotification
     }
@@ -54,6 +63,7 @@ public enum HookEvent: Equatable {
               let dict = object as? [String: Any] else { return nil }
 
         let session = dict["session_id"] as? String
+        let cwd = dict["cwd"] as? String
         switch dict["hook_event_name"] as? String {
         case "PostToolUse":
             guard let path = filePath(fromToolInput: dict["tool_input"]) else { return nil }
@@ -62,11 +72,11 @@ public enum HookEvent: Equatable {
                 fileURL: URL(fileURLWithPath: path), sessionID: session, tool: tool))
         case "Stop":
             return .agentStopped(HookAttention(
-                sessionID: session, message: dict["last_assistant_message"] as? String,
+                sessionID: session, cwd: cwd, message: dict["last_assistant_message"] as? String,
                 isNotification: false))
         case "Notification":
             return .agentStopped(HookAttention(
-                sessionID: session, message: dict["message"] as? String,
+                sessionID: session, cwd: cwd, message: dict["message"] as? String,
                 isNotification: true))
         default:
             // Unknown event name but it carries a file-editing tool_input → still
