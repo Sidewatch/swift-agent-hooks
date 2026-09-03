@@ -44,6 +44,25 @@ public enum HookSettings {
         return false
     }
 
+    /// The tagged commands currently written for `projectRoot` — what an installer
+    /// compares against the command it would write today, to notice that the binary
+    /// the entries point at has moved since they were installed.
+    public static func installedCommands(projectRoot: URL, marker: String) -> Set<String> {
+        let root = readSettings(settingsURL(projectRoot: projectRoot))
+        var out = Set<String>()
+        guard let hooks = root["hooks"] as? [String: Any] else { return out }
+        for value in hooks.values {
+            guard let groups = value as? [[String: Any]] else { continue }
+            for group in groups {
+                guard let inner = group["hooks"] as? [[String: Any]] else { continue }
+                for hook in inner {
+                    if let command = hook["command"] as? String, isTagged(command, marker: marker) { out.insert(command) }
+                }
+            }
+        }
+        return out
+    }
+
     /// Installs (or refreshes) the hook for `projectRoot`. First strips any prior
     /// entries tagged with `marker` (so a moved binary's path is corrected and
     /// nothing duplicates), then appends fresh PostToolUse / Stop / Notification

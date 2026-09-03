@@ -70,6 +70,19 @@ final class ClaudeCodeHooksTests: XCTestCase {
         XCTAssertEqual(edit.fileURL.path, "/p/x.swift")
     }
 
+    func testInstalledCommandsReportWhatIsWrittenAndFollowARefresh() throws {
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent("hooks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: project) }
+        XCTAssertEqual(HookSettings.installedCommands(projectRoot: project, marker: "# m"), [])
+        _ = try HookSettings.install(projectRoot: project, command: "'/old/App' --hook # m", marker: "# m")
+        XCTAssertEqual(HookSettings.installedCommands(projectRoot: project, marker: "# m"), ["'/old/App' --hook # m"])
+        // A refresh with the new path replaces every tagged entry: one command, the new one.
+        _ = try HookSettings.install(projectRoot: project, command: "'/new/App' --hook # m", marker: "# m")
+        XCTAssertEqual(HookSettings.installedCommands(projectRoot: project, marker: "# m"), ["'/new/App' --hook # m"])
+        // Someone else's hook is never reported as ours.
+        XCTAssertEqual(HookSettings.installedCommands(projectRoot: project, marker: "# other"), [])
+    }
+
     func testPostToolUseWithoutFilePathIsDropped() {
         XCTAssertNil(HookEvent.parse(data(#"{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}"#)))
     }
