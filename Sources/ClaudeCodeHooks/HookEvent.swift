@@ -1,7 +1,7 @@
 import Foundation
 
 /// A file the agent just touched (from a `PostToolUse` edit event).
-public struct HookFileEdit: Equatable {
+public struct HookFileEdit: Equatable, Sendable {
     /// Absolute URL of the edited/written file (from `tool_input.file_path`).
     public let fileURL: URL
     /// Claude Code session id, if the event carried one (`session_id`).
@@ -17,7 +17,7 @@ public struct HookFileEdit: Equatable {
 }
 
 /// The agent's idle/attention signal (from a `Stop` or `Notification` event).
-public struct HookAttention: Equatable {
+public struct HookAttention: Equatable, Sendable {
     /// Claude Code session id, if present.
     public let sessionID: String?
     /// The session's working directory when the event fired (`cwd`), if present.
@@ -52,7 +52,7 @@ public struct HookAttention: Equatable {
 /// outline: `hook_event_name`,
 /// `session_id`, `tool_name`, `tool_input.file_path`. This is a pure value —
 /// how a host reacts (post a notification, open a file) is the host's concern.
-public enum HookEvent: Equatable {
+public enum HookEvent: Equatable, Sendable {
     case fileEdited(HookFileEdit)
     case agentStopped(HookAttention)
     /// A tool is starting (`PreToolUse` / `BeforeTool`) or has finished (`PostToolUse` /
@@ -186,7 +186,7 @@ public enum HookEvent: Equatable {
 
 /// What a tool call is, in one short line: the file for an edit, the command for a shell
 /// call, the pattern for a search. A status row shows "claude · Edit main.swift" from it.
-public struct HookToolUse: Equatable {
+public struct HookToolUse: Equatable, Sendable {
     public let sessionID: String?
     public let cwd: String?
     /// The agent's own tool name (`Edit`, `Bash`, `apply_patch`, `write_file`…).
@@ -244,7 +244,7 @@ public struct HookToolUse: Equatable {
 }
 
 /// A prompt was submitted: the turn the status row's clock starts on.
-public struct HookTurnStart: Equatable {
+public struct HookTurnStart: Equatable, Sendable {
     public let sessionID: String?
     public let cwd: String?
     public let prompt: String?
@@ -255,7 +255,7 @@ public struct HookTurnStart: Equatable {
 
 /// A Claude Code subagent starting or stopping. `agentID` is Claude's `agent_id`;
 /// `agentType` its `agent_type` ("Explore", "general-purpose", a custom name).
-public struct HookSubagent: Equatable {
+public struct HookSubagent: Equatable, Sendable {
     public let sessionID: String?
     public let cwd: String?
     public let agentID: String
@@ -268,7 +268,7 @@ public struct HookSubagent: Equatable {
 
 /// A permission request, with what a host needs to show it and — for Claude Code — to
 /// answer it: the decision travels back on the hook's stdout (``PermissionDecision``).
-public struct HookPermissionRequest: Equatable {
+public struct HookPermissionRequest: Equatable, Sendable {
     public let sessionID: String?
     public let cwd: String?
     public let tool: String
