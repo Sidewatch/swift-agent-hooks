@@ -12,6 +12,66 @@ final class ClaudeCodeHooksTests: XCTestCase {
 
     private func data(_ s: String) -> Data { Data(s.utf8) }
 
+    // MARK: - Tool use / turn / subagent events
+
+    func testPreToolUseIsARunningToolWithASummary() {
+        let e = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"./scripts/test.sh --all\necho done"}}"#))
+        guard case .toolUsed(let t)? = e.first, e.count == 1 else { return XCTFail("expected one toolUsed, got \(e)") }
+        XCTAssertEqual(t.tool, "Bash")
+        XCTAssertEqual(t.summary, "./scripts/test.sh --all")   // first line only
+        XCTAssertFalse(t.isFinished)
+    }
+
+    func testPostToolUseEditYieldsTheEditAndAFinishedToolUse() {
+        let e = HookEvent.parseAll(data(#"{"cwd":"/p","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"/p/src/main.swift"}}"#))
+        guard e.count == 2, case .fileEdited = e[0], case .toolUsed(let t) = e[1] else { return XCTFail("expected edit then toolUsed, got \(e)") }
+        XCTAssertTrue(t.isFinished)
+        XCTAssertEqual(t.summary, "src/main.swift")   // relative to cwd
+    }
+
+    func testToolSummariesAcrossAgents() {
+        let cases: [(String, String, String)] = [
+            ("Read", #"{"file_path":"/x/y.md"}"#, "/x/y.md"),
+            ("write_file", #"{"file_path":"/p/a.py","content":"x"}"#, "a.py"),
+            ("run_shell_command", #"{"command":"pytest -q"}"#, "pytest -q"),
+            ("shell", #"{"command":["ls","-la"]}"#, "ls -la"),
+            ("Grep", #"{"pattern":"TODO","path":"/p"}"#, "TODO"),
+            ("WebFetch", #"{"url":"https://example.com"}"#, "https://example.com"),
+            ("Task", #"{"description":"Explore repo","prompt":"..."}"#, "Explore repo"),
+            ("apply_patch", #"{"command":"*** Begin Patch\n*** Update File: src/a.php\n@@\n-x\n+y\n*** End Patch\n"}"#, "src/a.php"),
+            ("MysteryTool", #"{"foo":"bar"}"#, ""),
+        ]
+        for (tool, input, want) in cases {
+            let dict = try! JSONSerialization.jsonObject(with: data(input))
+            XCTAssertEqual(HookToolUse.summary(tool: tool, input: dict, cwd: "/p"), want, tool)
+        }
+        let long = String(repeating: "x", count: 120)
+        XCTAssertEqual(HookToolUse.summary(tool: "Bash", input: ["command": long], cwd: nil).count, 80)
+    }
+
+    func testPreToolUseWithoutAToolNameIsDropped() {
+        XCTAssertEqual(HookEvent.parseAll(data(#"{"hook_event_name":"PreToolUse"}"#)), [])
+    }
+
+    func testTurnStartAndSubagents() {
+        let turn = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"UserPromptSubmit","prompt":"fix it"}"#))
+        XCTAssertEqual(turn, [.turnStarted(HookTurnStart(sessionID: "s", cwd: "/p", prompt: "fix it"))])
+        let gemini = HookEvent.parseAll(data(#"{"session_id":"g","cwd":"/p","hook_event_name":"BeforeAgent","prompt":"go"}"#))
+        XCTAssertEqual(gemini, [.turnStarted(HookTurnStart(sessionID: "g", cwd: "/p", prompt: "go"))])
+        let start = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"SubagentStart","agent_id":"a1","agent_type":"Explore"}"#))
+        XCTAssertEqual(start, [.subagentStarted(HookSubagent(sessionID: "s", cwd: "/p", agentID: "a1", agentType: "Explore"))])
+        let stop = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"SubagentStop","agent_id":"a1","agent_type":"Explore"}"#))
+        XCTAssertEqual(stop, [.subagentStopped(HookSubagent(sessionID: "s", cwd: "/p", agentID: "a1", agentType: "Explore"))])
+    }
+
+    func testInstalledEventsNamesEveryTaggedEvent() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hooks-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try HookSettings.install(at: url, entries: [.init("PreToolUse"), .init("Stop")], command: "/x/app --hook # sw", marker: "# sw")
+        XCTAssertEqual(HookSettings.installedEvents(at: url, marker: "# sw"), ["PreToolUse", "Stop"])
+        XCTAssertEqual(HookSettings.installedEvents(at: url, marker: "# other"), [])
+    }
+
     // MARK: - HookEvent.parse
 
     func testParsesPostToolUseEdit() {
@@ -100,7 +160,12 @@ final class ClaudeCodeHooksTests: XCTestCase {
     func testCodexBashPostToolUseIsNotAnEdit() {
         let json: [String: Any] = ["session_id": "s1", "cwd": "/tmp/proj", "hook_event_name": "PostToolUse",
                                    "tool_name": "Bash", "tool_input": ["command": "ls"], "tool_response": "a b"]
-        XCTAssertEqual(HookEvent.parseAll(try! JSONSerialization.data(withJSONObject: json)), [])
+        // A shell call is not an edit — but it IS a tool use the rail can show.
+        let events = HookEvent.parseAll(try! JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(events.contains { if case .fileEdited = $0 { return true } else { return false } })
+        XCTAssertEqual(events.count, 1)
+        guard case .toolUsed(let t)? = events.first else { return XCTFail("expected toolUsed") }
+        XCTAssertEqual(t.summary, "ls")
     }
 
     func testCodexPermissionRequestIsNeedsYou() {
@@ -134,7 +199,9 @@ final class ClaudeCodeHooksTests: XCTestCase {
     func testGeminiShellToolIsNotAnEdit() {
         let json: [String: Any] = ["session_id": "g1", "cwd": "/tmp/proj", "hook_event_name": "AfterTool",
                                    "tool_name": "run_shell_command", "tool_input": ["command": "ls"], "tool_response": ["llmContent": "a"]]
-        XCTAssertNil(HookEvent.parse(try! JSONSerialization.data(withJSONObject: json)))
+        let events = HookEvent.parseAll(try! JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(events.contains { if case .fileEdited = $0 { return true } else { return false } })
+        XCTAssertEqual(events.count, 1)   // the tool use itself
     }
 
     func testGeminiNotificationAndAfterAgent() {
@@ -178,7 +245,10 @@ final class ClaudeCodeHooksTests: XCTestCase {
     }
 
     func testPostToolUseWithoutFilePathIsDropped() {
-        XCTAssertNil(HookEvent.parse(data(#"{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}"#)))
+        let events = HookEvent.parseAll(data(#"{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}"#))
+        XCTAssertFalse(events.contains { if case .fileEdited = $0 { return true } else { return false } })
+        // And with no tool name at all there is nothing to report.
+        XCTAssertEqual(HookEvent.parseAll(data(#"{"hook_event_name":"PostToolUse","tool_input":{"command":"ls"}}"#)), [])
     }
 
     func testMalformedAndEmptyDropped() {
@@ -215,8 +285,9 @@ final class ClaudeCodeHooksTests: XCTestCase {
         XCTAssertFalse(HookSettings.isInstalled(projectRoot: p, marker: marker))
         try HookSettings.install(projectRoot: p, command: command, marker: marker)
         XCTAssertTrue(HookSettings.isInstalled(projectRoot: p, marker: marker))
-        // Three tagged commands: PostToolUse + Stop + Notification.
-        XCTAssertEqual(settingsText(p).components(separatedBy: marker).count - 1, 3)
+        // One tagged command per Claude entry (Pre/PostToolUse, UserPromptSubmit, Subagent×2, Stop, Notification).
+        XCTAssertEqual(settingsText(p).components(separatedBy: marker).count - 1, HookSettings.claudeEntries.count)
+        XCTAssertEqual(HookSettings.claudeEntries.count, 7)
     }
 
     func testInstallPreservesUserHooksAndPermissions() throws {
@@ -237,7 +308,7 @@ final class ClaudeCodeHooksTests: XCTestCase {
         try HookSettings.install(projectRoot: p, command: command, marker: marker)
         let afterSecond = settingsText(p)
         XCTAssertEqual(afterFirst, afterSecond)            // no duplication
-        XCTAssertEqual(afterSecond.components(separatedBy: marker).count - 1, 3)
+        XCTAssertEqual(afterSecond.components(separatedBy: marker).count - 1, HookSettings.claudeEntries.count)
     }
 
     func testUninstallRemovesOnlyOurs() throws {

@@ -38,7 +38,14 @@ public enum HookSettings {
 
     /// Claude Code's three: file edits, turn finished, needs you. Timeout in seconds.
     public static let claudeEntries: [Entry] = [
-        Entry("PostToolUse", matcher: "Edit|Write|MultiEdit|NotebookEdit"),
+        // Every tool, not just the editing ones: the Terminals rail shows what the agent is
+        // doing ("Bash ./scripts/test.sh") from PreToolUse, and PostToolUse still carries the
+        // file edits. UserPromptSubmit starts the turn clock; Subagent* feed the child rows.
+        Entry("PreToolUse"),
+        Entry("PostToolUse"),
+        Entry("UserPromptSubmit"),
+        Entry("SubagentStart"),
+        Entry("SubagentStop"),
         Entry("Stop"),
         Entry("Notification"),
     ]
@@ -68,6 +75,22 @@ public enum HookSettings {
     /// the entries point at has moved since they were installed.
     public static func installedCommands(projectRoot: URL, marker: String) -> Set<String> {
         installedCommands(at: settingsURL(projectRoot: projectRoot), marker: marker)
+    }
+
+    /// The event names that carry a tagged hook at `url` — so a host can tell that an
+    /// install predates events it has since started listening for, and refresh it.
+    public static func installedEvents(at url: URL, marker: String) -> Set<String> {
+        let root = readSettings(url)
+        var out = Set<String>()
+        guard let hooks = root["hooks"] as? [String: Any] else { return out }
+        for (event, value) in hooks {
+            guard let groups = value as? [[String: Any]] else { continue }
+            for group in groups {
+                guard let inner = group["hooks"] as? [[String: Any]] else { continue }
+                if inner.contains(where: { isTagged($0["command"] as? String, marker: marker) }) { out.insert(event) }
+            }
+        }
+        return out
     }
 
     public static func installedCommands(at url: URL, marker: String) -> Set<String> {
