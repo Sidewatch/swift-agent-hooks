@@ -29,8 +29,27 @@ public enum HookSettings {
     }
 
     /// Whether a hook tagged with `marker` is currently installed for `projectRoot`.
+    /// One event registration: the event name and an optional matcher.
+    public struct Entry: Equatable, Sendable {
+        public let event: String
+        public let matcher: String?
+        public init(_ event: String, matcher: String? = nil) { self.event = event; self.matcher = matcher }
+    }
+
+    /// Claude Code's three: file edits, turn finished, needs you. Timeout in seconds.
+    public static let claudeEntries: [Entry] = [
+        Entry("PostToolUse", matcher: "Edit|Write|MultiEdit|NotebookEdit"),
+        Entry("Stop"),
+        Entry("Notification"),
+    ]
+
     public static func isInstalled(projectRoot: URL, marker: String) -> Bool {
-        let root = readSettings(settingsURL(projectRoot: projectRoot))
+        isInstalled(at: settingsURL(projectRoot: projectRoot), marker: marker)
+    }
+
+    /// Whether any entry tagged `marker` exists in the hooks file at `url`.
+    public static func isInstalled(at url: URL, marker: String) -> Bool {
+        let root = readSettings(url)
         guard let hooks = root["hooks"] as? [String: Any] else { return false }
         for value in hooks.values {
             guard let groups = value as? [[String: Any]] else { continue }
@@ -48,7 +67,11 @@ public enum HookSettings {
     /// compares against the command it would write today, to notice that the binary
     /// the entries point at has moved since they were installed.
     public static func installedCommands(projectRoot: URL, marker: String) -> Set<String> {
-        let root = readSettings(settingsURL(projectRoot: projectRoot))
+        installedCommands(at: settingsURL(projectRoot: projectRoot), marker: marker)
+    }
+
+    public static func installedCommands(at url: URL, marker: String) -> Set<String> {
+        let root = readSettings(url)
         var out = Set<String>()
         guard let hooks = root["hooks"] as? [String: Any] else { return out }
         for value in hooks.values {
@@ -76,21 +99,29 @@ public enum HookSettings {
     ///   - marker: the inert `# …` tag identifying this tool's own entries.
     @discardableResult
     public static func install(projectRoot: URL, command: String, marker: String) throws -> Bool {
-        let url = settingsURL(projectRoot: projectRoot)
+        try install(at: settingsURL(projectRoot: projectRoot), entries: claudeEntries, command: command, marker: marker)
+    }
+
+    /// Installs (or refreshes) `entries` into the hooks file at `url`, tagged with
+    /// `marker`. The same JSON shape serves Claude Code (`.claude/settings.local.json`),
+    /// Codex CLI (`.codex/hooks.json`) and Gemini CLI (`.gemini/settings.json`):
+    /// `{"hooks": {Event: [{"matcher": …, "hooks": [{"type": "command", …}]}]}}` —
+    /// only the timeout's unit differs (seconds for Claude and Codex, milliseconds
+    /// for Gemini), hence `timeout` is the caller's. Strips prior tagged entries first,
+    /// so a re-install never duplicates and a moved binary's path is corrected.
+    @discardableResult
+    public static func install(at url: URL, entries: [Entry], command: String, marker: String, timeout: Int = 5) throws -> Bool {
         var root = stripTaggedHooks(try readSettingsForMerge(url), marker: marker)
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
 
-        let cmdObject: [String: Any] = ["type": "command", "command": command, "timeout": 5]
-        func append(_ event: String, matcher: String?) {
+        let cmdObject: [String: Any] = ["type": "command", "command": command, "timeout": timeout]
+        for entry in entries {
             var group: [String: Any] = ["hooks": [cmdObject]]
-            if let matcher { group["matcher"] = matcher }
-            var groups = (hooks[event] as? [[String: Any]]) ?? []
+            if let matcher = entry.matcher { group["matcher"] = matcher }
+            var groups = (hooks[entry.event] as? [[String: Any]]) ?? []
             groups.append(group)
-            hooks[event] = groups
+            hooks[entry.event] = groups
         }
-        append("PostToolUse", matcher: "Edit|Write|MultiEdit|NotebookEdit")
-        append("Stop", matcher: nil)            // no matcher → matches all
-        append("Notification", matcher: nil)
 
         root["hooks"] = hooks
         try writeSettings(root, to: url)
@@ -103,8 +134,12 @@ public enum HookSettings {
     /// file.
     @discardableResult
     public static func uninstall(projectRoot: URL, marker: String) throws -> Bool {
-        guard isInstalled(projectRoot: projectRoot, marker: marker) else { return false }
-        let url = settingsURL(projectRoot: projectRoot)
+        try uninstall(at: settingsURL(projectRoot: projectRoot), marker: marker)
+    }
+
+    @discardableResult
+    public static func uninstall(at url: URL, marker: String) throws -> Bool {
+        guard isInstalled(at: url, marker: marker) else { return false }
         try writeSettings(stripTaggedHooks(readSettings(url), marker: marker), to: url)
         return true
     }

@@ -48,45 +48,84 @@ public struct HookAttention: Equatable {
 /// (`JSONSerialization`, tolerant of unknown/missing fields): a malformed or
 /// unrecognized event yields nil and is silently dropped, never crashes.
 ///
-/// Field names follow the Claude Code hooks contract: `hook_event_name`,
+/// Field names follow the Claude Code hooks contract — which Codex and Gemini share in
+/// outline: `hook_event_name`,
 /// `session_id`, `tool_name`, `tool_input.file_path`. This is a pure value —
 /// how a host reacts (post a notification, open a file) is the host's concern.
 public enum HookEvent: Equatable {
     case fileEdited(HookFileEdit)
     case agentStopped(HookAttention)
 
-    /// Parses one event JSON blob (the bytes Claude Code writes to a hook's stdin).
-    /// Returns nil for anything not worth acting on.
-    public static func parse(_ data: Data) -> HookEvent? {
+    /// Parses one event JSON blob (the bytes an agent writes to a hook's stdin) into
+    /// the first event worth acting on — kept for callers that expect one; a Codex
+    /// patch touching several files yields several, see ``parseAll(_:)``.
+    public static func parse(_ data: Data) -> HookEvent? { parseAll(data).first }
+
+    /// Every event worth acting on in one payload. Three agents speak here, and the
+    /// payloads were read from their sources (3 Sep 2026), not their docs:
+    /// - Claude Code: `PostToolUse` with `tool_input.file_path` / `notebook_path`,
+    ///   `Stop` (turn finished), `Notification` (needs you).
+    /// - Codex CLI: `PostToolUse` whose `tool_name` is `apply_patch` with the raw patch
+    ///   in `tool_input.command` — one edit per Update/Add header, relative paths
+    ///   joined to `cwd`; `PermissionRequest` (needs you, names the tool); `Stop`.
+    /// - Gemini CLI: `AfterTool` with `tool_input.file_path` (write_file / replace),
+    ///   `Notification` (ToolPermission → needs you), `AfterAgent` (turn finished).
+    /// Session and working directory are the common `session_id` / `cwd`.
+    public static func parseAll(_ data: Data) -> [HookEvent] {
         guard !data.isEmpty,
               let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else { return nil }
+              let dict = object as? [String: Any] else { return [] }
 
         let session = dict["session_id"] as? String
         let cwd = dict["cwd"] as? String
+        let tool = dict["tool_name"] as? String ?? ""
+        func edit(_ path: String) -> HookEvent? {
+            guard let url = resolve(path, cwd: cwd) else { return nil }
+            return .fileEdited(HookFileEdit(fileURL: url, sessionID: session, tool: tool))
+        }
+        func edits(fromToolInput input: Any?) -> [HookEvent] {
+            if tool == "apply_patch", let dict = input as? [String: Any],
+               let patch = dict["command"] as? String {
+                return ApplyPatch.touchedFiles(in: patch).filter { $0.kind != .delete }.compactMap { edit($0.path) }
+            }
+            guard let path = filePath(fromToolInput: input), let e = edit(path) else { return [] }
+            return [e]
+        }
         switch dict["hook_event_name"] as? String {
-        case "PostToolUse":
-            guard let path = filePath(fromToolInput: dict["tool_input"]) else { return nil }
-            let tool = dict["tool_name"] as? String ?? ""
-            return .fileEdited(HookFileEdit(
-                fileURL: URL(fileURLWithPath: path), sessionID: session, tool: tool))
+        case "PostToolUse", "AfterTool":
+            return edits(fromToolInput: dict["tool_input"])
         case "Stop":
-            return .agentStopped(HookAttention(
+            return [.agentStopped(HookAttention(
                 sessionID: session, cwd: cwd, message: dict["last_assistant_message"] as? String,
-                isNotification: false))
+                isNotification: false))]
+        case "AfterAgent":
+            return [.agentStopped(HookAttention(
+                sessionID: session, cwd: cwd, message: dict["prompt_response"] as? String,
+                isNotification: false))]
         case "Notification":
-            return .agentStopped(HookAttention(
+            return [.agentStopped(HookAttention(
                 sessionID: session, cwd: cwd, message: dict["message"] as? String,
-                isNotification: true))
+                isNotification: true))]
+        case "PermissionRequest":
+            return [.agentStopped(HookAttention(
+                sessionID: session, cwd: cwd,
+                message: tool.isEmpty ? "Approval needed" : "Approval needed: \(tool)",
+                isNotification: true))]
         default:
             // Unknown event name but it carries a file-editing tool_input → still
-            // surface the edit; otherwise ignore. Keeps us forward-compatible if
-            // Claude Code renames events.
-            guard let path = filePath(fromToolInput: dict["tool_input"]) else { return nil }
-            let tool = dict["tool_name"] as? String ?? ""
-            return .fileEdited(HookFileEdit(
-                fileURL: URL(fileURLWithPath: path), sessionID: session, tool: tool))
+            // surface the edit; otherwise ignore. Keeps us forward-compatible if an
+            // agent renames events.
+            return edits(fromToolInput: dict["tool_input"])
         }
+    }
+
+    /// Absolute for an absolute path; joined to `cwd` for a relative one (Codex patch
+    /// headers, and any agent that sends project-relative paths); nil without either.
+    private static func resolve(_ path: String, cwd: String?) -> URL? {
+        guard !path.isEmpty else { return nil }
+        if path.hasPrefix("/") { return URL(fileURLWithPath: path) }
+        guard let cwd, !cwd.isEmpty else { return nil }
+        return URL(fileURLWithPath: cwd).appendingPathComponent(path).standardizedFileURL
     }
 
     /// Extracts the edited file's absolute path from a `tool_input` object across
