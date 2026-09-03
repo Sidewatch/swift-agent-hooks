@@ -64,6 +64,31 @@ final class ClaudeCodeHooksTests: XCTestCase {
         XCTAssertEqual(stop, [.subagentStopped(HookSubagent(sessionID: "s", cwd: "/p", agentID: "a1", agentType: "Explore"))])
     }
 
+    func testClaudePermissionRequestIsDecidableAndSummarised() {
+        let e = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"npm test"},"tool_use_id":"toolu_1","prompt_id":"pr-1","permission_suggestions":{"allow":true,"always_allow":true,"deny":true}}"#))
+        XCTAssertEqual(e.count, 2)
+        guard case .agentStopped(let attention) = e[0], case .permissionRequested(let r) = e[1] else { return XCTFail("expected attention then request, got \(e)") }
+        XCTAssertTrue(attention.isNotification)
+        XCTAssertEqual(r.tool, "Bash"); XCTAssertEqual(r.summary, "npm test"); XCTAssertEqual(r.label, "Bash npm test")
+        XCTAssertEqual(r.toolUseID, "toolu_1"); XCTAssertTrue(r.isDecidable); XCTAssertTrue(r.canAlwaysAllow)
+    }
+
+    func testCodexPermissionRequestIsDisplayOnly() {
+        let e = HookEvent.parseAll(data(#"{"session_id":"c1","turn_id":"t1","cwd":"/p","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"rm -rf build"},"permission_mode":"default"}"#))
+        guard case .permissionRequested(let r)? = e.last else { return XCTFail("expected request") }
+        XCTAssertFalse(r.isDecidable, "no tool_use_id / prompt_id → not Claude's protocol")
+        XCTAssertFalse(r.canAlwaysAllow)
+    }
+
+    func testPermissionDecisionOutputMatchesTheDocumentedShape() {
+        let out = String(decoding: PermissionDecision.alwaysAllow.hookOutput(reason: "trusted"), as: UTF8.self)
+        XCTAssertEqual(out, #"{"hookSpecificOutput":{"decision":"always_allow","decisionReason":"trusted","hookEventName":"PermissionRequest"}}"# + "\n")
+        XCTAssertEqual(PermissionDecision.parse(PermissionDecision.deny.hookOutput()), .deny)
+        XCTAssertEqual(PermissionDecision.parse(PermissionDecision.allow.hookOutput()), .allow)
+        XCTAssertNil(PermissionDecision.parse(Data()))
+        XCTAssertFalse(String(decoding: PermissionDecision.allow.hookOutput(), as: UTF8.self).contains("decisionReason"))
+    }
+
     func testInstalledEventsNamesEveryTaggedEvent() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("hooks-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }

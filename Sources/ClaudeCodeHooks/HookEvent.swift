@@ -63,6 +63,10 @@ public enum HookEvent: Equatable {
     /// Claude Code `SubagentStart` / `SubagentStop`.
     case subagentStarted(HookSubagent)
     case subagentStopped(HookSubagent)
+    /// A `PermissionRequest`: the agent is asking to run a tool. Emitted ALONGSIDE the
+    /// `.agentStopped(waiting)` attention so a host can both flag the terminal and, when it
+    /// has the payload's decision protocol (Claude Code), answer from its own UI.
+    case permissionRequested(HookPermissionRequest)
 
     /// Parses one event JSON blob (the bytes an agent writes to a hook's stdin) into
     /// the first event worth acting on — kept for callers that expect one; a Codex
@@ -130,10 +134,21 @@ public enum HookEvent: Equatable {
                 sessionID: session, cwd: cwd, message: dict["message"] as? String,
                 isNotification: true))]
         case "PermissionRequest":
+            let suggestions = dict["permission_suggestions"] as? [String: Any]
+            let request = HookPermissionRequest(
+                sessionID: session, cwd: cwd, tool: tool,
+                summary: HookToolUse.summary(tool: tool, input: dict["tool_input"], cwd: cwd),
+                toolUseID: dict["tool_use_id"] as? String,
+                promptID: dict["prompt_id"] as? String,
+                // Claude Code's payload carries tool_use_id / prompt_id; Codex's does not, and
+                // Codex's answer protocol is not this one — so only Claude's are decidable.
+                isDecidable: dict["tool_use_id"] != nil || dict["prompt_id"] != nil,
+                canAlwaysAllow: (suggestions?["always_allow"] as? Bool) ?? false)
             return [.agentStopped(HookAttention(
-                sessionID: session, cwd: cwd,
-                message: tool.isEmpty ? "Approval needed" : "Approval needed: \(tool)",
-                isNotification: true))]
+                        sessionID: session, cwd: cwd,
+                        message: tool.isEmpty ? "Approval needed" : "Approval needed: \(tool)",
+                        isNotification: true)),
+                    .permissionRequested(request)]
         default:
             // Unknown event name but it carries a file-editing tool_input → still
             // surface the edit; otherwise ignore. Keeps us forward-compatible if an
@@ -247,5 +262,60 @@ public struct HookSubagent: Equatable {
     public let agentType: String?
     public init(sessionID: String?, cwd: String?, agentID: String, agentType: String?) {
         self.sessionID = sessionID; self.cwd = cwd; self.agentID = agentID; self.agentType = agentType
+    }
+}
+
+
+/// A permission request, with what a host needs to show it and — for Claude Code — to
+/// answer it: the decision travels back on the hook's stdout (``PermissionDecision``).
+public struct HookPermissionRequest: Equatable {
+    public let sessionID: String?
+    public let cwd: String?
+    public let tool: String
+    /// One-line argument summary, as for ``HookToolUse``.
+    public let summary: String
+    public let toolUseID: String?
+    public let promptID: String?
+    /// True when the payload is Claude Code's, whose hook may print a decision. Codex's
+    /// PermissionRequest is display-only here.
+    public let isDecidable: Bool
+    /// Whether Claude offered "always allow" for this request (`permission_suggestions`).
+    public let canAlwaysAllow: Bool
+
+    public init(sessionID: String?, cwd: String?, tool: String, summary: String, toolUseID: String?,
+                promptID: String?, isDecidable: Bool, canAlwaysAllow: Bool) {
+        self.sessionID = sessionID; self.cwd = cwd; self.tool = tool; self.summary = summary
+        self.toolUseID = toolUseID; self.promptID = promptID; self.isDecidable = isDecidable
+        self.canAlwaysAllow = canAlwaysAllow
+    }
+
+    /// "Bash npm test" — the tool alone when it took nothing showable.
+    public var label: String { summary.isEmpty ? tool : "\(tool) \(summary)" }
+}
+
+/// What a `PermissionRequest` hook prints to decide (Claude Code hooks reference, 2026):
+/// `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":"allow"|"deny"|"always_allow","decisionReason":"…"}}`.
+/// Printing nothing leaves the decision to Claude's own prompt.
+public enum PermissionDecision: String, Equatable, Sendable {
+    case allow
+    case deny
+    case alwaysAllow = "always_allow"
+
+    /// The bytes for the hook's stdout, newline-terminated.
+    public func hookOutput(reason: String? = nil) -> Data {
+        var inner: [String: Any] = ["hookEventName": "PermissionRequest", "decision": rawValue]
+        if let reason, !reason.isEmpty { inner["decisionReason"] = reason }
+        let object: [String: Any] = ["hookSpecificOutput": inner]
+        let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+        return data + Data("\n".utf8)
+    }
+
+    /// Reads a decision back out of hook output — for the host's self-test.
+    public static func parse(_ data: Data) -> PermissionDecision? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let inner = object["hookSpecificOutput"] as? [String: Any],
+              inner["hookEventName"] as? String == "PermissionRequest",
+              let raw = inner["decision"] as? String else { return nil }
+        return PermissionDecision(rawValue: raw)
     }
 }
