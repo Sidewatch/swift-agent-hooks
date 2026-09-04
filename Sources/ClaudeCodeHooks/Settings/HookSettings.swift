@@ -14,15 +14,6 @@ import Foundation
 /// caller, so this stays pure Foundation with no dependency on any particular app's
 /// binary path. The command string is expected to already contain the marker.
 public enum HookSettings {
-
-    /// Thrown by ``install(projectRoot:command:marker:)`` when a settings file
-    /// exists but cannot be parsed as a JSON object — merging would have to treat
-    /// its contents (permissions, the user's other hooks) as absent and rewrite
-    /// the file without them, so the install refuses instead.
-    public enum SettingsError: Error, Equatable {
-        case malformedSettings(URL)
-    }
-
     /// `<projectRoot>/.claude/settings.local.json`.
     public static func settingsURL(projectRoot: URL) -> URL {
         projectRoot.appendingPathComponent(".claude/settings.local.json")

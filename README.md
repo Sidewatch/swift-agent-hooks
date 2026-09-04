@@ -58,3 +58,10 @@ try HookSettings.uninstall(projectRoot: repo, marker: marker)
 
 - **Transport is not here.** How events reach your process — a Unix-domain socket, a named pipe, an HTTP endpoint — is a host concern (and often platform-specific). This package parses the bytes and manages the settings file; wire the delivery yourself.
 - The command string you pass to `install` is expected to already contain the `marker`, so the installer can detect its own entries for idempotent re-install and exact uninstall.
+
+## For agents
+
+Read `CONTRIBUTING.md` first: the folder layout and the PR rules. `swift test` is the whole
+check, and a new test must fail before the change it covers. `CLAUDE.md` / `AGENTS.md` carry a
+module map.
+
