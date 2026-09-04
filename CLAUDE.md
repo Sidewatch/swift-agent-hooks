@@ -11,7 +11,9 @@ The pure, testable core for integrating with [Claude Code](https://docs.anthropi
 - `Errors/` — every Error type, one per file: HookSettings+SettingsError
 - `Models/` — value types — the shape of a thing, nothing else: HookEvent
 - `Settings/` — the engine: settings: HookSettings
-- `Support/` — pure helpers: parsing, escaping, validation: ApplyPatch, HookPayload, JSONObject
+- `Socket/` — the local socket an app and its `--hook` process meet on: HookForwarder (client), HookListener (server)
+- `Install/` — writing the hook command into an agent's settings: HookInstaller (per project), UserLevelHookInstaller (Claude, Codex, Gemini at user level)
+- `Support/` — pure helpers: parsing, escaping, validation: ApplyPatch, HookPayload, JSONObject, SocketIO
 
 ## Rules
 

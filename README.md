@@ -54,6 +54,32 @@ try HookSettings.install(projectRoot: repo, command: command, marker: marker)
 try HookSettings.uninstall(projectRoot: repo, marker: marker)
 ```
 
+## Socket and installers
+
+The package also ships the two halves of the local socket an app uses to receive events from
+its own `--hook` process, and the installers that write that command into an agent's settings.
+
+```swift
+// In the app, once at launch:
+let listener = HookListener(socketURL: socketURL, onEvents: { events in /* hop to main */ },
+                            onPermissionRequest: { request, reply in
+                                // return true and call reply(bytes) (or reply(nil)) later; false closes it now
+                                false
+                            })
+listener.start()
+
+// In the `--hook` process the agent spawns:
+HookForwarder(socketURL: socketURL).forwardStandardInput(replyTimeout: 290)
+
+// Installing the command into a project, or at user level:
+let installer = HookInstaller(marker: "# my-app-hook") { "'/Applications/My.app/…/My' --hook # my-app-hook" }
+try installer.install(projectRoot: projectURL)
+try UserLevelHookInstaller.codex(home: home, installer: installer).install()
+```
+
+The forwarder never blocks, hangs, throws or writes stderr; the listener reclaims a stale socket
+file and defers to a live instance. Both are covered by socket tests in `HookSocketTests`.
+
 ## Notes
 
 - **Transport is not here.** How events reach your process — a Unix-domain socket, a named pipe, an HTTP endpoint — is a host concern (and often platform-specific). This package parses the bytes and manages the settings file; wire the delivery yourself.
