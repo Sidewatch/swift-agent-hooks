@@ -10,6 +10,6 @@ let package = Package(
     targets: [
         .target(name: "AgentHooks", path: "Sources",
                 swiftSettings: [.swiftLanguageMode(.v6)]),
-        .testTarget(name: "ClaudeCodeHooksTests", dependencies: ["AgentHooks"], path: "Tests"),
+        .testTarget(name: "AgentHooksTests", dependencies: ["AgentHooks"], path: "Tests"),
     ]
 )

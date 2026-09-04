@@ -1,5 +1,5 @@
 //
-//  ClaudeCodeHooksTests.swift
+//  AgentHooksTests.swift
 //  Tests for HookEvent.parse (lenient JSON → typed event) and HookSettings
 //  (non-destructive, idempotent, reversible settings.local.json merge) — the pure
 //  core the app's --hook-selftest exercises end-to-end.
@@ -8,7 +8,7 @@
 import XCTest
 @testable import AgentHooks
 
-final class ClaudeCodeHooksTests: XCTestCase {
+final class AgentHooksTests: XCTestCase {
 
     private func data(_ s: String) -> Data { Data(s.utf8) }
 
