@@ -40,81 +40,78 @@ public enum HookEvent: Equatable, Sendable {
     ///   `Notification` (ToolPermission → needs you), `AfterAgent` (turn finished).
     /// Session and working directory are the common `session_id` / `cwd`.
     public static func parseAll(_ data: Data) -> [HookEvent] {
-        guard !data.isEmpty,
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else { return [] }
-
-        let session = dict["session_id"] as? String
-        let cwd = dict["cwd"] as? String
-        let tool = dict["tool_name"] as? String ?? ""
-        func edit(_ path: String) -> HookEvent? {
-            guard let url = resolve(path, cwd: cwd) else { return nil }
-            return .fileEdited(HookFileEdit(fileURL: url, sessionID: session, tool: tool))
-        }
-        func edits(fromToolInput input: Any?) -> [HookEvent] {
-            if tool == "apply_patch", let dict = input as? [String: Any],
-               let patch = dict["command"] as? String {
-                return ApplyPatch.touchedFiles(in: patch).filter { $0.kind != .delete }.compactMap { edit($0.path) }
-            }
-            guard let path = filePath(fromToolInput: input), let e = edit(path) else { return [] }
-            return [e]
-        }
-        let toolUse: (Bool) -> HookEvent = { finished in
-            .toolUsed(HookToolUse(sessionID: session, cwd: cwd, tool: tool,
-                                  summary: HookToolUse.summary(tool: tool, input: dict["tool_input"], cwd: cwd),
-                                  isFinished: finished))
-        }
-        switch dict["hook_event_name"] as? String {
+        guard let payload = HookPayload(data) else { return [] }
+        switch payload.eventName {
         case "PreToolUse", "BeforeTool":
-            guard !tool.isEmpty else { return [] }
-            return [toolUse(false)]
+            return payload.tool.isEmpty ? [] : [toolUse(payload, finished: false)]
         case "PostToolUse", "AfterTool":
-            return edits(fromToolInput: dict["tool_input"]) + (tool.isEmpty ? [] : [toolUse(true)])
+            return edits(in: payload) + (payload.tool.isEmpty ? [] : [toolUse(payload, finished: true)])
         case "UserPromptSubmit", "BeforeAgent":
-            return [.turnStarted(HookTurnStart(sessionID: session, cwd: cwd, prompt: dict["prompt"] as? String))]
-        case "SubagentStart", "SubagentStop":
-            let sub = HookSubagent(sessionID: session, cwd: cwd,
-                                   agentID: (dict["agent_id"] as? String) ?? (dict["agent_transcript_path"] as? String) ?? "",
-                                   agentType: dict["agent_type"] as? String)
-            return [dict["hook_event_name"] as? String == "SubagentStart" ? .subagentStarted(sub) : .subagentStopped(sub)]
+            return [.turnStarted(HookTurnStart(sessionID: payload.session, cwd: payload.cwd, prompt: payload.string("prompt")))]
+        case "SubagentStart":
+            return [.subagentStarted(subagent(payload))]
+        case "SubagentStop":
+            return [.subagentStopped(subagent(payload))]
         case "Stop":
-            return [.agentStopped(HookAttention(
-                sessionID: session, cwd: cwd, message: dict["last_assistant_message"] as? String,
-                isNotification: false))]
+            return [stopped(payload, message: payload.string("last_assistant_message"), isNotification: false)]
         case "AfterAgent":
-            return [.agentStopped(HookAttention(
-                sessionID: session, cwd: cwd, message: dict["prompt_response"] as? String,
-                isNotification: false))]
+            return [stopped(payload, message: payload.string("prompt_response"), isNotification: false)]
         case "Notification":
-            return [.agentStopped(HookAttention(
-                sessionID: session, cwd: cwd, message: dict["message"] as? String,
-                isNotification: true))]
+            return [stopped(payload, message: payload.string("message"), isNotification: true)]
         case "PermissionRequest":
-            // `permission_suggestions` is an ARRAY of {type: allow|deny, rule} (hooks reference,
-            // 2026) — the rules Claude would persist for "don't ask again". An "always allow"
-            // is only offered when there is an allow rule to persist.
-            let suggestions = (dict["permission_suggestions"] as? [[String: Any]]) ?? []
-            let allowRules = suggestions.compactMap { $0["type"] as? String == "allow" ? $0["rule"] as? String : nil }
-            let request = HookPermissionRequest(
-                sessionID: session, cwd: cwd, tool: tool,
-                summary: HookToolUse.summary(tool: tool, input: dict["tool_input"], cwd: cwd),
-                toolUseID: dict["tool_use_id"] as? String,
-                promptID: dict["prompt_id"] as? String,
-                // Claude Code's payload carries tool_use_id / prompt_id; Codex's does not, and
-                // Codex's answer protocol is not this one — so only Claude's are decidable.
-                isDecidable: dict["tool_use_id"] != nil || dict["prompt_id"] != nil,
-                canAlwaysAllow: !allowRules.isEmpty, suggestedAllowRules: allowRules)
-            return [.agentStopped(HookAttention(
-                        sessionID: session, cwd: cwd,
-                        message: tool.isEmpty ? "Approval needed" : "Approval needed: \(tool)",
-                        isNotification: true)),
-                    .permissionRequested(request)]
+            return [stopped(payload, message: payload.tool.isEmpty ? "Approval needed" : "Approval needed: \(payload.tool)", isNotification: true),
+                    .permissionRequested(permissionRequest(payload))]
         default:
-            // Unknown event name but it carries a file-editing tool_input → still
-            // surface the edit; otherwise ignore. Keeps us forward-compatible if an
-            // agent renames events.
-            return edits(fromToolInput: dict["tool_input"])
+            // Unknown event name but it carries a file-editing tool_input → still surface the
+            // edit; otherwise ignore. Keeps us forward-compatible if an agent renames events.
+            return edits(in: payload)
         }
+    }
+
+    // MARK: - One parser per event shape
+
+    private static func toolUse(_ p: HookPayload, finished: Bool) -> HookEvent {
+        .toolUsed(HookToolUse(sessionID: p.session, cwd: p.cwd, tool: p.tool,
+                              summary: HookToolUse.summary(tool: p.tool, input: p.toolInput, cwd: p.cwd),
+                              isFinished: finished))
+    }
+
+    /// The file edits a tool call touched: Codex's `apply_patch` names several in its patch
+    /// text; everyone else names one in `tool_input`.
+    private static func edits(in p: HookPayload) -> [HookEvent] {
+        if p.tool == "apply_patch", let input = p.toolInput as? [String: Any], let patch = input["command"] as? String {
+            return ApplyPatch.touchedFiles(in: patch).filter { $0.kind != .delete }.compactMap { edit($0.path, in: p) }
+        }
+        guard let path = filePath(fromToolInput: p.toolInput), let e = edit(path, in: p) else { return [] }
+        return [e]
+    }
+
+    private static func edit(_ path: String, in p: HookPayload) -> HookEvent? {
+        guard let url = resolve(path, cwd: p.cwd) else { return nil }
+        return .fileEdited(HookFileEdit(fileURL: url, sessionID: p.session, tool: p.tool))
+    }
+
+    private static func subagent(_ p: HookPayload) -> HookSubagent {
+        HookSubagent(sessionID: p.session, cwd: p.cwd,
+                     agentID: p.string("agent_id") ?? p.string("agent_transcript_path") ?? "",
+                     agentType: p.string("agent_type"))
+    }
+
+    private static func stopped(_ p: HookPayload, message: String?, isNotification: Bool) -> HookEvent {
+        .agentStopped(HookAttention(sessionID: p.session, cwd: p.cwd, message: message, isNotification: isNotification))
+    }
+
+    /// Claude Code's payload carries tool_use_id / prompt_id; Codex's does not, and Codex's
+    /// answer protocol is not this one — so only Claude's requests are decidable. "Always
+    /// allow" is only offered when there is an allow rule to persist.
+    private static func permissionRequest(_ p: HookPayload) -> HookPermissionRequest {
+        let allowRules = p.suggestedAllowRules
+        return HookPermissionRequest(
+            sessionID: p.session, cwd: p.cwd, tool: p.tool,
+            summary: HookToolUse.summary(tool: p.tool, input: p.toolInput, cwd: p.cwd),
+            toolUseID: p.string("tool_use_id"), promptID: p.string("prompt_id"),
+            isDecidable: p.has("tool_use_id") || p.has("prompt_id"),
+            canAlwaysAllow: !allowRules.isEmpty, suggestedAllowRules: allowRules)
     }
 
     /// Absolute for an absolute path; joined to `cwd` for a relative one (Codex patch

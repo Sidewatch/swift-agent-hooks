@@ -11,7 +11,7 @@ The pure, testable core for integrating with [Claude Code](https://docs.anthropi
 - `Errors/` — every Error type, one per file: HookSettings+SettingsError
 - `Models/` — value types — the shape of a thing, nothing else: HookEvent
 - `Settings/` — the engine: settings: HookSettings
-- `Support/` — pure helpers: parsing, escaping, validation: ApplyPatch
+- `Support/` — pure helpers: parsing, escaping, validation: ApplyPatch, HookPayload, JSONObject
 
 ## Rules
 
