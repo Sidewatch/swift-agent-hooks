@@ -33,10 +33,16 @@ public enum HookSettings {
     public struct Entry: Equatable, Sendable {
         public let event: String
         public let matcher: String?
-        public init(_ event: String, matcher: String? = nil) { self.event = event; self.matcher = matcher }
+        /// Per-entry hook timeout (the installer's unit); nil takes the install call's default.
+        /// PermissionRequest needs minutes — the hook is the one waiting for a human.
+        public let timeout: Int?
+        public init(_ event: String, matcher: String? = nil, timeout: Int? = nil) {
+            self.event = event; self.matcher = matcher; self.timeout = timeout
+        }
     }
 
-    /// Claude Code's three: file edits, turn finished, needs you. Timeout in seconds.
+    /// Claude Code's entries: file edits, turn clock, subagents, turn finished, needs you,
+    /// and the permission prompt itself. Timeouts in seconds.
     public static let claudeEntries: [Entry] = [
         // Every tool, not just the editing ones: the Terminals rail shows what the agent is
         // doing ("Bash ./scripts/test.sh") from PreToolUse, and PostToolUse still carries the
@@ -48,6 +54,11 @@ public enum HookSettings {
         Entry("SubagentStop"),
         Entry("Stop"),
         Entry("Notification"),
+        // The Approval Inbox: Claude holds its own prompt while this hook runs and honours the
+        // decision it prints. 300 s covers the inbox's 280 s hold plus the client's grace; the
+        // default 5 s would have killed the hook before anyone could click. (Missing until
+        // 4 Sep 2026 — the inbox was harness-proven but never registered with real Claude.)
+        Entry("PermissionRequest", timeout: 300),
     ]
 
     public static func isInstalled(projectRoot: URL, marker: String) -> Bool {
@@ -137,8 +148,8 @@ public enum HookSettings {
         var root = stripTaggedHooks(try readSettingsForMerge(url), marker: marker)
         var hooks = (root["hooks"] as? [String: Any]) ?? [:]
 
-        let cmdObject: [String: Any] = ["type": "command", "command": command, "timeout": timeout]
         for entry in entries {
+            let cmdObject: [String: Any] = ["type": "command", "command": command, "timeout": entry.timeout ?? timeout]
             var group: [String: Any] = ["hooks": [cmdObject]]
             if let matcher = entry.matcher { group["matcher"] = matcher }
             var groups = (hooks[entry.event] as? [[String: Any]]) ?? []

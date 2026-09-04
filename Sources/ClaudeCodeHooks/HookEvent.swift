@@ -134,7 +134,11 @@ public enum HookEvent: Equatable, Sendable {
                 sessionID: session, cwd: cwd, message: dict["message"] as? String,
                 isNotification: true))]
         case "PermissionRequest":
-            let suggestions = dict["permission_suggestions"] as? [String: Any]
+            // `permission_suggestions` is an ARRAY of {type: allow|deny, rule} (hooks reference,
+            // 2026) — the rules Claude would persist for "don't ask again". An "always allow"
+            // is only offered when there is an allow rule to persist.
+            let suggestions = (dict["permission_suggestions"] as? [[String: Any]]) ?? []
+            let allowRules = suggestions.compactMap { $0["type"] as? String == "allow" ? $0["rule"] as? String : nil }
             let request = HookPermissionRequest(
                 sessionID: session, cwd: cwd, tool: tool,
                 summary: HookToolUse.summary(tool: tool, input: dict["tool_input"], cwd: cwd),
@@ -143,7 +147,7 @@ public enum HookEvent: Equatable, Sendable {
                 // Claude Code's payload carries tool_use_id / prompt_id; Codex's does not, and
                 // Codex's answer protocol is not this one — so only Claude's are decidable.
                 isDecidable: dict["tool_use_id"] != nil || dict["prompt_id"] != nil,
-                canAlwaysAllow: (suggestions?["always_allow"] as? Bool) ?? false)
+                canAlwaysAllow: !allowRules.isEmpty, suggestedAllowRules: allowRules)
             return [.agentStopped(HookAttention(
                         sessionID: session, cwd: cwd,
                         message: tool.isEmpty ? "Approval needed" : "Approval needed: \(tool)",
@@ -279,32 +283,43 @@ public struct HookPermissionRequest: Equatable, Sendable {
     /// True when the payload is Claude Code's, whose hook may print a decision. Codex's
     /// PermissionRequest is display-only here.
     public let isDecidable: Bool
-    /// Whether Claude offered "always allow" for this request (`permission_suggestions`).
+    /// Whether Claude offered "always allow" for this request (an allow rule in
+    /// `permission_suggestions`).
     public let canAlwaysAllow: Bool
+    /// The allow rules Claude suggested persisting (`"Bash(npm test:*)"`); sent back as
+    /// `updatedPermissions` with an allow-and-don't-ask-again decision.
+    public let suggestedAllowRules: [String]
 
     public init(sessionID: String?, cwd: String?, tool: String, summary: String, toolUseID: String?,
-                promptID: String?, isDecidable: Bool, canAlwaysAllow: Bool) {
+                promptID: String?, isDecidable: Bool, canAlwaysAllow: Bool, suggestedAllowRules: [String] = []) {
         self.sessionID = sessionID; self.cwd = cwd; self.tool = tool; self.summary = summary
         self.toolUseID = toolUseID; self.promptID = promptID; self.isDecidable = isDecidable
-        self.canAlwaysAllow = canAlwaysAllow
+        self.canAlwaysAllow = canAlwaysAllow; self.suggestedAllowRules = suggestedAllowRules
     }
 
     /// "Bash npm test" — the tool alone when it took nothing showable.
     public var label: String { summary.isEmpty ? tool : "\(tool) \(summary)" }
 }
 
-/// What a `PermissionRequest` hook prints to decide (Claude Code hooks reference, 2026):
-/// `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":"allow"|"deny"|"always_allow","decisionReason":"…"}}`.
-/// Printing nothing leaves the decision to Claude's own prompt.
+/// What a `PermissionRequest` hook prints to decide (code.claude.com hooks reference, read
+/// 4 Sep 2026): `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":
+/// "allow"|"deny"|"allowAndDontAskAgain","message":"…","updatedPermissions":[{"type":"allow",
+/// "rule":"…"}]}}`. Exit code 2 is NOT honoured for this event; only this JSON decides.
+/// Printing nothing leaves the decision to Claude's own prompt. (The first version invented
+/// `always_allow` / `decisionReason` and would have been ignored by real Claude.)
 public enum PermissionDecision: String, Equatable, Sendable {
     case allow
     case deny
-    case alwaysAllow = "always_allow"
+    case alwaysAllow = "allowAndDontAskAgain"
 
-    /// The bytes for the hook's stdout, newline-terminated.
-    public func hookOutput(reason: String? = nil) -> Data {
+    /// The bytes for the hook's stdout, newline-terminated. `updatedPermissions` are the allow
+    /// rules to persist — pass the request's `suggestedAllowRules` with `.alwaysAllow`.
+    public func hookOutput(reason: String? = nil, updatedPermissions: [String] = []) -> Data {
         var inner: [String: Any] = ["hookEventName": "PermissionRequest", "decision": rawValue]
-        if let reason, !reason.isEmpty { inner["decisionReason"] = reason }
+        if let reason, !reason.isEmpty { inner["message"] = reason }
+        if !updatedPermissions.isEmpty {
+            inner["updatedPermissions"] = updatedPermissions.map { ["type": "allow", "rule": $0] }
+        }
         let object: [String: Any] = ["hookSpecificOutput": inner]
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return data + Data("\n".utf8)

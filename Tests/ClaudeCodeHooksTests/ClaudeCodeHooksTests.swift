@@ -65,12 +65,31 @@ final class ClaudeCodeHooksTests: XCTestCase {
     }
 
     func testClaudePermissionRequestIsDecidableAndSummarised() {
-        let e = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"npm test"},"tool_use_id":"toolu_1","prompt_id":"pr-1","permission_suggestions":{"allow":true,"always_allow":true,"deny":true}}"#))
+        let e = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"npm test"},"tool_use_id":"toolu_1","prompt_id":"pr-1","permission_suggestions":[{"type":"allow","rule":"Bash(npm test:*)"}]}"#))
         XCTAssertEqual(e.count, 2)
         guard case .agentStopped(let attention) = e[0], case .permissionRequested(let r) = e[1] else { return XCTFail("expected attention then request, got \(e)") }
         XCTAssertTrue(attention.isNotification)
         XCTAssertEqual(r.tool, "Bash"); XCTAssertEqual(r.summary, "npm test"); XCTAssertEqual(r.label, "Bash npm test")
         XCTAssertEqual(r.toolUseID, "toolu_1"); XCTAssertTrue(r.isDecidable); XCTAssertTrue(r.canAlwaysAllow)
+        XCTAssertEqual(r.suggestedAllowRules, ["Bash(npm test:*)"])
+    }
+
+    func testPermissionRequestWithoutAnAllowRuleCannotAlwaysAllow() {
+        let e = HookEvent.parseAll(data(#"{"session_id":"s","cwd":"/p","hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"rm -rf /"},"tool_use_id":"toolu_2","permission_suggestions":[{"type":"deny","rule":"Bash(rm:*)"}]}"#))
+        guard case .permissionRequested(let r)? = e.last else { return XCTFail("expected request") }
+        XCTAssertTrue(r.isDecidable); XCTAssertFalse(r.canAlwaysAllow); XCTAssertEqual(r.suggestedAllowRules, [])
+    }
+
+    func testClaudeEntriesRegisterPermissionRequestWithAHumanScaleTimeout() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("hooks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try HookSettings.install(projectRoot: root, command: "/x/Sidewatch --hook # tag", marker: "# tag")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: HookSettings.settingsURL(projectRoot: root))) as! [String: Any]
+        let hooks = json["hooks"] as! [String: Any]
+        let perm = ((hooks["PermissionRequest"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
+        XCTAssertEqual(perm["timeout"] as? Int, 300, "the hook waits on a person; 5 s would kill it first")
+        let pre = ((hooks["PreToolUse"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]])[0]
+        XCTAssertEqual(pre["timeout"] as? Int, 5)
     }
 
     func testCodexPermissionRequestIsDisplayOnly() {
@@ -81,12 +100,13 @@ final class ClaudeCodeHooksTests: XCTestCase {
     }
 
     func testPermissionDecisionOutputMatchesTheDocumentedShape() {
-        let out = String(decoding: PermissionDecision.alwaysAllow.hookOutput(reason: "trusted"), as: UTF8.self)
-        XCTAssertEqual(out, #"{"hookSpecificOutput":{"decision":"always_allow","decisionReason":"trusted","hookEventName":"PermissionRequest"}}"# + "\n")
+        let out = String(decoding: PermissionDecision.alwaysAllow.hookOutput(reason: "trusted", updatedPermissions: ["Bash(npm test:*)"]), as: UTF8.self)
+        XCTAssertEqual(out, #"{"hookSpecificOutput":{"decision":"allowAndDontAskAgain","hookEventName":"PermissionRequest","message":"trusted","updatedPermissions":[{"rule":"Bash(npm test:*)","type":"allow"}]}}"# + "\n")
+        XCTAssertFalse(String(decoding: PermissionDecision.allow.hookOutput(), as: UTF8.self).contains("updatedPermissions"))
         XCTAssertEqual(PermissionDecision.parse(PermissionDecision.deny.hookOutput()), .deny)
         XCTAssertEqual(PermissionDecision.parse(PermissionDecision.allow.hookOutput()), .allow)
         XCTAssertNil(PermissionDecision.parse(Data()))
-        XCTAssertFalse(String(decoding: PermissionDecision.allow.hookOutput(), as: UTF8.self).contains("decisionReason"))
+        XCTAssertFalse(String(decoding: PermissionDecision.allow.hookOutput(), as: UTF8.self).contains("message"))
     }
 
     func testInstalledEventsNamesEveryTaggedEvent() throws {
@@ -312,7 +332,7 @@ final class ClaudeCodeHooksTests: XCTestCase {
         XCTAssertTrue(HookSettings.isInstalled(projectRoot: p, marker: marker))
         // One tagged command per Claude entry (Pre/PostToolUse, UserPromptSubmit, Subagent×2, Stop, Notification).
         XCTAssertEqual(settingsText(p).components(separatedBy: marker).count - 1, HookSettings.claudeEntries.count)
-        XCTAssertEqual(HookSettings.claudeEntries.count, 7)
+        XCTAssertEqual(HookSettings.claudeEntries.count, 8)   // 8 with PermissionRequest (4 Sep 2026)
     }
 
     func testInstallPreservesUserHooksAndPermissions() throws {
