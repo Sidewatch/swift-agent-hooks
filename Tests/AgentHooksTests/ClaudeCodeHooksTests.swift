@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import ClaudeCodeHooks
+@testable import AgentHooks
 
 final class ClaudeCodeHooksTests: XCTestCase {
 

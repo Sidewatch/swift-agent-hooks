@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeCodeHooks",
+    name: "AgentHooks",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "ClaudeCodeHooks", targets: ["ClaudeCodeHooks"]),
+        .library(name: "AgentHooks", targets: ["AgentHooks"]),
     ],
     targets: [
-        .target(name: "ClaudeCodeHooks", path: "Sources",
+        .target(name: "AgentHooks", path: "Sources",
                 swiftSettings: [.swiftLanguageMode(.v6)]),
-        .testTarget(name: "ClaudeCodeHooksTests", dependencies: ["ClaudeCodeHooks"], path: "Tests"),
+        .testTarget(name: "ClaudeCodeHooksTests", dependencies: ["AgentHooks"], path: "Tests"),
     ]
 )

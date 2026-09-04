@@ -1,4 +1,4 @@
-# Swift Claude Code Hooks
+# Swift Agent Hooks
 
 The pure, testable core for integrating with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) hooks — a lenient event parser and a non-destructive `settings.local.json` installer. Foundation only, zero dependencies. The transport (how you receive events) is left to the host; this package is the parsing + settings logic worth unit-testing.
 
@@ -28,14 +28,14 @@ Claude Code runs user-configured shell commands on lifecycle events (`PostToolUs
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Sidewatch/swift-claude-code-hooks.git", from: "1.0.0")
+    .package(url: "https://github.com/Sidewatch/swift-agent-hooks.git", from: "1.0.0")
 ]
 ```
 
 ## Usage
 
 ```swift
-import ClaudeCodeHooks
+import AgentHooks
 
 // Parse an event a hook received on stdin.
 if let event = HookEvent.parse(stdinData) {
