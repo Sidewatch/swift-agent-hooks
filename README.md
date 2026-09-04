@@ -19,8 +19,8 @@ Claude Code runs user-configured shell commands on lifecycle events (`PostToolUs
 
 ## Requirements
 
-- macOS 10.15+
-- Swift 5.9+
+- macOS 14+
+- Swift 6.0+ (Swift 6 language mode)
 
 ## Installation
 
