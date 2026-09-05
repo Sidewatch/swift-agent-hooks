@@ -2,6 +2,11 @@
 //  HookSubagent.swift
 //  AgentHooks
 //
+//  A Claude Code subagent starting or stopping. `agentID` is Claude's `agent_id`; `agentType`
+//  its `agent_type` ("Explore", "general-purpose", a custom name).
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

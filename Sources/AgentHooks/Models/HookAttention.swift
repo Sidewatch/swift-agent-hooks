@@ -2,6 +2,10 @@
 //  HookAttention.swift
 //  AgentHooks
 //
+//  The agent's idle/attention signal (from a `Stop` or `Notification` event).
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

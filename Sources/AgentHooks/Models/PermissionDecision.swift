@@ -2,6 +2,13 @@
 //  PermissionDecision.swift
 //  AgentHooks
 //
+//  What a `PermissionRequest` hook prints to decide (code.claude.com hooks reference, read 4
+//  Sep 2026): `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":
+//  "allow"|"deny"|"allowAndDontAskAgain","message":"…","updatedPermissions":[{"type":"allow",
+//  "rule":"…"}]}}`.
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

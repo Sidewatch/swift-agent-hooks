@@ -2,13 +2,17 @@
 //  HookInstallerTests.swift
 //  AgentHooksTests
 //
-//  The install wrappers over HookSettings: the command provider, the marker, and the
-//  moved-app refresh rule for project-level and user-level installs.
+//  Tests for `HookInstaller`: project and global installs round-trip, the marker keeps the
+//  wrapper idempotent, and uninstall leaves other hooks alone.
+//
+//  Created by David Sherlock on 9/5/26.
 //
 
 import XCTest
 @testable import AgentHooks
 
+/// Tests for `HookInstaller`: project and global installs round-trip, the marker keeps the
+/// wrapper idempotent, and uninstall leaves other hooks alone.
 final class HookInstallerTests: XCTestCase {
 
     private func temporaryFolder() throws -> URL {

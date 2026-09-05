@@ -2,6 +2,10 @@
 //  HookFileEdit.swift
 //  AgentHooks
 //
+//  A file the agent just touched (from a `PostToolUse` edit event).
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

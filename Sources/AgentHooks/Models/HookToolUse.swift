@@ -2,6 +2,11 @@
 //  HookToolUse.swift
 //  AgentHooks
 //
+//  What a tool call is, in one short line: the file for an edit, the command for a shell call,
+//  the pattern for a search. A status row shows "claude · Edit main.swift" from it.
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

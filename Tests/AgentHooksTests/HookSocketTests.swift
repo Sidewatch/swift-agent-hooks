@@ -2,13 +2,17 @@
 //  HookSocketTests.swift
 //  AgentHooksTests
 //
-//  The forwarder and the listener over a real local socket: an event round trip, a
-//  permission request answered on the same connection, and the probe-then-claim rules.
+//  Tests for the hook forwarder and listener over a Unix socket: an edit event round-trips, and
+//  Claude and Codex permission asks arrive intact.
+//
+//  Created by David Sherlock on 9/5/26.
 //
 
 import XCTest
 @testable import AgentHooks
 
+/// Tests for the hook forwarder and listener over a Unix socket: an edit event round-trips, and
+/// Claude and Codex permission asks arrive intact.
 final class HookSocketTests: XCTestCase {
 
     private func freshSocketURL() -> URL {

@@ -1,13 +1,18 @@
 //
-//  AgentHooksTests.swift
-//  Tests for HookEvent.parse (lenient JSON → typed event) and HookSettings
-//  (non-destructive, idempotent, reversible settings.local.json merge) — the pure
-//  core the app's --hook-selftest exercises end-to-end.
+//  ClaudeCodeHooksTests.swift
+//  AgentHooksTests
+//
+//  Tests for `HookEvent.parseAll` over Claude Code hook payloads: tool use, edits, permission
+//  requests and stop events map to the right events.
+//
+//  Created by David Sherlock on 7/19/26.
 //
 
 import XCTest
 @testable import AgentHooks
 
+/// Tests for `HookEvent.parseAll` over Claude Code hook payloads: tool use, edits, permission
+/// requests and stop events map to the right events.
 final class AgentHooksTests: XCTestCase {
 
     private func data(_ s: String) -> Data { Data(s.utf8) }

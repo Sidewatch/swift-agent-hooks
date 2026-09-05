@@ -2,6 +2,11 @@
 //  HookPermissionRequest.swift
 //  AgentHooks
 //
+//  A permission request, with what a host needs to show it and — for Claude Code — to answer
+//  it: the decision travels back on the hook's stdout (``PermissionDecision``).
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 
