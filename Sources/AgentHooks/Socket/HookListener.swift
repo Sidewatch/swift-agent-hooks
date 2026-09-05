@@ -1,3 +1,12 @@
+//
+//  HookListener.swift
+//  AgentHooks
+//
+//  The server half of the hook socket, living inside the running app.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 import Darwin
 

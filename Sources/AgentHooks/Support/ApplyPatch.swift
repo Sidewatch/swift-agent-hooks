@@ -1,3 +1,12 @@
+//
+//  ApplyPatch.swift
+//  AgentHooks
+//
+//  The files an OpenAI Codex `apply_patch` script touches.
+//
+//  Created by David Sherlock on 9/3/26.
+//
+
 import Foundation
 
 /// The files an OpenAI Codex `apply_patch` script touches. Codex hands hooks the raw

@@ -1,3 +1,13 @@
+//
+//  HookForwarder.swift
+//  AgentHooks
+//
+//  The client half of the hook socket, run by the app's `--hook` process — a throwaway spawned
+//  by the agent for every event.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 import Darwin
 

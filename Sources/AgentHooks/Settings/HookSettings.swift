@@ -1,3 +1,14 @@
+//
+//  HookSettings.swift
+//  AgentHooks
+//
+//  Writes (and removes) a Claude Code hook registration in a project's
+//  `.claude/settings.local.json` — the untracked, per-project local override, so the install is
+//  reversible, never committed, and never a shared/global change.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// Writes (and removes) a Claude Code hook registration in a project's

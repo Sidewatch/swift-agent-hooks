@@ -1,3 +1,12 @@
+//
+//  HookPayload.swift
+//  AgentHooks
+//
+//  One hook's JSON payload with the fields every agent's schema shares, read once.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// One hook's JSON payload with the fields every agent's schema shares, read once. The event

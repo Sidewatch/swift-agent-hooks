@@ -1,3 +1,12 @@
+//
+//  SocketIO.swift
+//  AgentHooks
+//
+//  POSIX plumbing shared by `HookForwarder` and `HookListener`.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 import Darwin
 

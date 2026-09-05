@@ -1,3 +1,13 @@
+//
+//  UserLevelHookInstaller.swift
+//  AgentHooks
+//
+//  A hook install at USER level: one settings file in the home directory rather than a
+//  project's.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// A hook install at USER level: one settings file in the home directory rather than a

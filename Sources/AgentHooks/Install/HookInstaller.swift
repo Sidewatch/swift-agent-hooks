@@ -1,3 +1,13 @@
+//
+//  HookInstaller.swift
+//  AgentHooks
+//
+//  Installs an app's hook command into a project's Claude Code settings
+//  (`<project>/.claude/settings.local.json`).
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// Installs an app's hook command into a project's Claude Code settings

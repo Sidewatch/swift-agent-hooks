@@ -1,3 +1,12 @@
+//
+//  HookEvent.swift
+//  AgentHooks
+//
+//  A decoded Claude Code hook event.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// A decoded Claude Code hook event. Parsing is deliberately lenient
